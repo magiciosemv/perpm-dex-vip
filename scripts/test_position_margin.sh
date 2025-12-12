@@ -23,7 +23,7 @@ get_free_margin() {
 
 get_position() {
     local addr=$1
-    cast call --rpc-url $RPC_URL $EXCHANGE "positions(address)(int256,uint256,int256)" $addr
+    cast call --rpc-url $RPC_URL $EXCHANGE "getPosition(address)((int256,uint256,int256))" $addr
 }
 
 count_pending_orders() {
