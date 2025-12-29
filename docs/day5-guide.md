@@ -37,7 +37,7 @@ Day 5 建立在 Day 4 之上，请先确认：
 - GraphQL API 可查询 `trades`、`orders`、`candles`
 - 前端 Recent Trades 列表从 Indexer 获取数据
 - 前端 K 线图表显示历史价格走势
-- 前端 OrderBook 深度从 Indexer 获取（可选）
+- 前端 OrderBook 深度从 Indexer 获取
 
 ---
 
@@ -95,6 +95,12 @@ type Order @entity {
   initialAmount: BigInt!
   amount: BigInt!
   status: String! # OPEN, FILLED, CANCELLED
+  timestamp: Int!
+}
+
+type LatestCandle @entity {
+  id: ID! # "1"
+  closePrice: BigInt!
   timestamp: Int!
 }
 ```
@@ -347,27 +353,40 @@ query {
 
 ---
 
-### Step 7: 前端集成图表库
+### Step 7: 前端数据抓取 (Store 逻辑)
 
-修改：
+在 `frontend/store/exchangeStore.tsx` 中，我们需要通过 GraphQL 客户端抓取索引器的数据。
 
-- `frontend/components/TradingChart.tsx`
-
-前端需要：
-
-1. 从 Indexer GraphQL API 获取 Candle 数据
-2. 使用图表库（如 lightweight-charts）渲染 K 线
-
+#### 7.1 抓取成交历史
 ```typescript
-// TODO: 从 Indexer 获取 K 线数据
-// const response = await fetch('http://localhost:8080/graphql', {
-//     method: 'POST',
-//     body: JSON.stringify({
-//         query: `{ candles(where: { resolution: "1m" }) { timestamp openPrice highPrice lowPrice closePrice } }`
-//     })
-// });
-// const data = await response.json();
-// 转换为图表库格式并渲染
+loadTrades = async (): Promise<Trade[]> => {
+    const result = await client.query(GET_RECENT_TRADES, {}).toPromise();
+    if (!result.data?.Trade) return [];
+    return result.data.Trade.map((t: any) => ({
+        id: t.id,
+        price: Number(formatEther(t.price)),
+        amount: Number(formatEther(t.amount)),
+        time: new Date(t.timestamp * 1000).toLocaleTimeString(),
+        side: BigInt(t.buyOrderId) > BigInt(t.sellOrderId) ? 'buy' : 'sell',
+    }));
+};
+```
+
+#### 7.2 抓取 K 线数据
+```typescript
+loadCandles = async () => {
+    const result = await client.query(GET_CANDLES, {}).toPromise();
+    if (result.data?.Candle) {
+        const candles = result.data.Candle.map((c: any) => ({
+            time: c.timestamp,
+            open: Number(formatEther(c.openPrice)),
+            high: Number(formatEther(c.highPrice)),
+            low: Number(formatEther(c.lowPrice)),
+            close: Number(formatEther(c.closePrice)),
+        }));
+        this.candles = candles;
+    }
+};
 ```
 
 ---
@@ -474,20 +493,20 @@ Day 6 会在此基础上实现"资金费率机制"：
 
 ---
 
-## 9) 可选挑战 / 扩展（不影响主线）
+## 9) 进阶开发（必须完成）
 
 1. **多分辨率 K 线**
-   - 支持 5m、15m、1h 等多种时间粒度
-   - 修改 resolution 参数和时间戳取整逻辑
+   - 支持 5m、15m、1h 等多种时间粒度。
+   - 修改 resolution 参数和时间戳取整逻辑。
 
 2. **实时 WebSocket 推送**
-   - 使用 Envio 的 subscription 功能
-   - 前端订阅新成交事件
+   - 使用 Envio 的 subscription 功能。
+   - 前端订阅新成交事件。
 
 3. **深度图数据**
-   - 聚合 Order 实体生成深度数据
-   - 按价格级别汇总买卖盘数量
+   - 聚合 Order 实体生成深度数据。
+   - 按价格级别汇总买卖盘数量。
 
 4. **历史数据分页**
-   - 实现 GraphQL 分页查询
-   - 前端无限滚动加载更多数据
+   - 实现 GraphQL 分页查询。
+   - 前端无限滚动加载更多数据。

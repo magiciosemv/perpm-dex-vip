@@ -179,7 +179,7 @@ function liquidate(address trader, uint256 amount) external virtual nonReentrant
         p.realizedPnl -= int256(debt);
     }
     
-    emit Liquidated(trader, msg.sender, amount, fee);
+    emit Liquidated(trader, msg.sender, fee, 0);
 }
 ```
 
@@ -349,20 +349,20 @@ forge test --match-contract Day7IntegrationTest -vvv
 
 ---
 
-## 9) 可选挑战 / 扩展（不影响主线）
+## 9) 进阶开发（必须完成）
 
 1. **保险基金**
-   - 用利润积累保险基金
-   - 坏账先从保险基金扣除
+   - 用利润积累保险基金。
+   - 坏账先从保险基金扣除。
 
 2. **自动去杠杆（ADL）**
-   - 当清算无法完成时触发 ADL
-   - 按盈利排序强制平仓对手方
+   - 当清算无法完成时触发 ADL。
+   - 按盈利排序强制平仓对手方。
 
 3. **清算者机器人**
-   - 编写 Keeper 扫描 `canLiquidate`
-   - 自动触发清算赚取费用
+   - 编写 Keeper 扫描 `canLiquidate`。
+   - 自动触发清算赚取费用。
 
 4. **前端危险预警**
-   - 当接近清算线时显示 Toast 警告
-   - 显示"距强平还剩 X 保证金"
+   - 当接近清算线时显示 Toast 警告。
+   - 显示"距强平还剩 X 保证金"。

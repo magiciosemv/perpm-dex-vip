@@ -253,6 +253,44 @@ if (closing == existingAbs) {
 }
 ```
 
+### Step 9: 前端持仓实时更新
+
+为了在 UI 上看到 Alice 和 Bob 的持仓变化，我们需要更新 `frontend/hooks/useExchange.tsx` 中的 `refresh` 函数，使其能够调用我们在 Day 1 实现的 `getPosition` 视图函数。
+
+```typescript
+// 更新 refresh 函数
+const refresh = useCallback(async () => {
+    if (!EXCHANGE_ADDRESS || !account) return;
+    setSyncing(true);
+    try {
+        const [marginBal, pos] = await Promise.all([
+            publicClient.readContract({
+                address: EXCHANGE_ADDRESS,
+                abi: EXCHANGE_ABI,
+                functionName: 'margin',
+                args: [account],
+            }),
+            publicClient.readContract({
+                address: EXCHANGE_ADDRESS,
+                abi: EXCHANGE_ABI,
+                functionName: 'getPosition',
+                args: [account],
+            }),
+        ]);
+        setMargin(marginBal as bigint);
+        setPosition(pos as PositionSnapshot);
+        setError(undefined);
+    } catch (e: any) {
+        console.error(e);
+    } finally {
+        setSyncing(false);
+    }
+}, [account]);
+```
+
+> [!NOTE]
+> 使用 `Promise.all` 可以并发请求多个数据，显著提升页面加载速度。
+
 ---
 
 ## 6) 测试与验证
@@ -373,3 +411,26 @@ Day 4 会在此基础上引入"价格服务"：
 4. **前端增强**
    - 在 Positions 组件中显示 `realizedPnl` 字段
    - 在 Recent Trades 中高亮自己参与的成交
+
+---
+
+## 9) 进阶：前端持仓刷新（Alignment）
+
+在 `useExchange.tsx` 中，我们需要在 `refresh` 函数中通过 `Promise.all` 并发读取保证金和持仓数据，以确保 UI 状态的实时性。
+
+```typescript
+const [marginBal, pos] = await Promise.all([
+    publicClient.readContract({
+        address: EXCHANGE_ADDRESS,
+        abi: EXCHANGE_ABI,
+        functionName: 'margin',
+        args: [account],
+    }),
+    publicClient.readContract({
+        address: EXCHANGE_ADDRESS,
+        abi: EXCHANGE_ABI,
+        functionName: 'getPosition',
+        args: [account],
+    }),
+]);
+```

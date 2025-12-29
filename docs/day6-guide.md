@@ -157,6 +157,24 @@ function _applyFunding(address trader) internal virtual {
     // Step 7: 触发事件
     emit FundingPaid(trader, payment);
 }
+
+/**
+ * 外部结算接口：手动为特定账户结算资金费
+ */
+function settleUserFunding(address trader) external virtual {
+    _applyFunding(trader);
+}
+
+/**
+ * 参数更新接口：设置结算周期与费率上限 (仅管理员)
+ */
+function setFundingParams(uint256 interval, int256 maxRatePerInterval) external virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+    require(interval > 0, "interval=0");
+    require(maxRatePerInterval >= 0, "cap<0");
+    fundingInterval = interval;
+    maxFundingRatePerInterval = maxRatePerInterval;
+    emit FundingParamsUpdated(interval, maxRatePerInterval);
+}
 ```
 
 ---
@@ -166,13 +184,8 @@ function _applyFunding(address trader) internal virtual {
 ```solidity
 function _unrealizedPnl(Position memory p) internal view returns (int256) {
     if (p.size == 0) return 0;
-    
-    int256 priceDiff = int256(markPrice) - int256(p.entryPrice);
-    
-    // 空头需要取反
-    if (p.size < 0) priceDiff = -priceDiff;
-    
-    return (priceDiff * int256(SignedMath.abs(p.size))) / 1e18;
+    int256 pnlPerUnit = int256(markPrice) - int256(p.entryPrice);
+    return (pnlPerUnit * p.size) / 1e18;
 }
 ```
 
@@ -203,12 +216,33 @@ setInterval(settleFunding, 60 * 60 * 1000); // 1 hour
 
 ---
 
-### Step 6: 前端显示资金费信息
+### Step 6: 前端资金费与强平展示
 
-在 Positions 组件中添加：
+#### 6.1 在 Store 中计算预测资金费率
+在 `exchangeStore.tsx` 的 `refresh` 中增加币安公式计算：
 
-- **未结资金费**：根据当前费率差值计算
-- **强平价格**：根据保证金和持仓计算
+```typescript
+const m = Number(formatEther(mark));
+const i = Number(formatEther(index));
+const premiumIndex = (m - i) / i;
+const interestRate = 0.0001; // 0.01%
+const clampRange = 0.0005;   // 0.05%
+
+let diff = interestRate - premiumIndex;
+if (diff > clampRange) diff = clampRange;
+if (diff < -clampRange) diff = -clampRange;
+
+this.fundingRate = premiumIndex + diff;
+```
+
+#### 6.2 在组件中计算强平价格
+在 `Positions.tsx` 中，根据保证金和持仓计算预估强平价：
+
+```typescript
+// 多头强平价公式 (简化版): LiqPrice = (Entry*Size - Margin) / (Size * (1 - MM))
+const mmRatio = 0.005; // 0.5% 维持保证金
+const liqPrice = (entry * size - effectiveMargin) / (size * (1 - mmRatio));
+```
 
 ---
 
@@ -332,20 +366,20 @@ Day 7 会在此基础上实现"清算系统"：
 
 ---
 
-## 9) 可选挑战 / 扩展（不影响主线）
+## 9) 进阶开发（必须完成）
 
 1. **动态资金费率**
-   - 根据市场波动调整 clampRange
-   - 高波动时收紧，低波动时放宽
+   - 根据市场波动调整 clampRange。
+   - 高波动时收紧，低波动时放宽。
 
 2. **资金费率历史记录**
-   - 记录每次结算的 rate
-   - 实现 `getFundingHistory()` 视图函数
+   - 记录每次结算的 rate。
+   - 实现 `getFundingHistory()` 视图函数。
 
 3. **前端资金费预估**
-   - 显示"下次结算预估支付/收入"
-   - 显示"距下次结算剩余时间"
+   - 显示"下次结算预估支付/收入"。
+   - 显示"距下次结算剩余时间"。
 
 4. **多 interval 支持**
-   - 支持 1h / 4h / 8h 等多种结算周期
-   - 允许用户选择偏好
+   - 支持 1h / 4h / 8h 等多种结算周期。
+   - 允许用户选择偏好。

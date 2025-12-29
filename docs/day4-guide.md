@@ -122,29 +122,27 @@ function updateIndexPrice(uint256 newIndexPrice) external virtual onlyRole(OPERA
 
 ```solidity
 function _calculateMarkPrice(uint256 indexPrice_) internal view virtual returns (uint256) {
-    // TODO: 请实现此函数
+    if (bestBuyId == 0 || bestSellId == 0) return indexPrice_;
 
-    // Step 1: 获取最优买卖价
-    // uint256 bestBid = bestBuyId != 0 ? orders[bestBuyId].price : 0;
-    // uint256 bestAsk = bestSellId != 0 ? orders[bestSellId].price : 0;
+    uint256 bestBid = orders[bestBuyId].price;
+    uint256 bestAsk = orders[bestSellId].price;
+    
+    // Median of (bestBid, bestAsk, indexPrice)
+    uint256 median;
+    if ((bestBid <= bestAsk && bestAsk <= indexPrice_) || (indexPrice_ <= bestAsk && bestAsk <= bestBid)) {
+        median = bestAsk;
+    } else if ((bestAsk <= bestBid && bestBid <= indexPrice_) || (indexPrice_ <= bestBid && bestBid <= bestAsk)) {
+        median = bestBid;
+    } else {
+        median = indexPrice_;
+    }
 
-    // Step 2: 订单簿为空时返回 indexPrice
-    // if (bestBid == 0 && bestAsk == 0) return indexPrice_;
+    // ±5% Deviation Clamp
+    uint256 maxDeviation = (indexPrice_ * 500) / 10000;
+    if (median > indexPrice_ + maxDeviation) return indexPrice_ + maxDeviation;
+    if (indexPrice_ > maxDeviation && median < indexPrice_ - maxDeviation) return indexPrice_ - maxDeviation;
 
-    // Step 3: 三价取中
-    // 如果只有买盘：mid = median(bestBid, indexPrice_, indexPrice_) = indexPrice_;
-    // 如果只有卖盘：mid = median(bestAsk, indexPrice_, indexPrice_) = indexPrice_;
-    // 如果买卖都有：mid = median(bestBid, bestAsk, indexPrice_)
-    // uint256 mid = _median(bestBid, bestAsk, indexPrice_);
-
-    // Step 4: 钳位到 ±5%
-    // uint256 upper = indexPrice_ * 105 / 100;
-    // uint256 lower = indexPrice_ * 95 / 100;
-    // if (mid > upper) return upper;
-    // if (mid < lower) return lower;
-    // return mid;
-
-    return indexPrice_; // TODO: 替换为完整实现
+    return median;
 }
 ```
 
@@ -167,28 +165,25 @@ function _median(uint256 a, uint256 b, uint256 c) internal pure returns (uint256
 
 Keeper 需要定期执行以下操作：
 
-1. 从外部 API（Binance 或 Pyth）获取 ETH/USD 价格
+1. 从外部 Pyth Network API 获取 ETH/USD 价格
 2. 转换为合约精度（`1e18`）
 3. 调用 `updateIndexPrice()` 推送到链上
 
-**方案 A：使用 Binance API（简单）**
+**方案：使用 Pyth Network（推荐，精度更稳健）**
 
 ```typescript
-// TODO: 实现从 Binance 获取价格
-// const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
-// const data = await res.json();
-// const price = parseFloat(data.price);
-// const priceWei = parseEther(price.toFixed(2));
-```
+// 1. 获取价格
+const res = await fetch(`https://hermes.pyth.network/v2/updates/price/latest?ids[]=${PYTH_ETH_ID}`);
+const data = await res.json();
+const priceInfo = data.parsed[0].price;
 
-**方案 B：使用 Pyth Network（高级）**
+// 2. 解析价格 (price = p * 10^expo)
+const p = BigInt(priceInfo.price);
+const expo = priceInfo.expo;
 
-```typescript
-// TODO: 实现从 Pyth Hermes 获取价格
-// const PYTH_ETH_ID = '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
-// const res = await fetch(`https://hermes.pyth.network/v2/updates/price/latest?ids[]=${PYTH_ETH_ID}`);
-// const data = await res.json();
-// 解析 data.parsed[0].price 和 data.parsed[0].expo
+// 3. 转换为 1e18 精度 (Wei)
+// 公式: p * 10^expo * 10^18 = p * 10^(18 + expo)
+const priceWei = p * (10n ** BigInt(18 + expo));
 ```
 
 **调用合约更新价格**
@@ -206,27 +201,32 @@ Keeper 需要定期执行以下操作：
 
 ---
 
-### Step 6: 前端显示价格（可选）
-
-确认以下组件已能显示价格：
+### Step 6: 前端价格展示
+确认以下组件已正确显示价格。如果不显示，说明 Keeper 未运行或合约函数未实现：
 
 - **Header 组件**：显示 Index Price 和 Mark Price
 - **MarketStats 组件**：显示价格相关统计
 
-前端应通过 `publicClient.readContract` 读取：
+前端应通过更新 `useExchange.tsx` 中的 `refresh` 函数来同步价格：
 
 ```typescript
-const indexPrice = await publicClient.readContract({
-    address: EXCHANGE_ADDRESS,
-    abi: EXCHANGE_ABI,
-    functionName: 'indexPrice'
-});
+// 在 refresh 函数的 Promise.all 中添加价格查询
+const [marginBal, pos, mPrice, iPrice] = await Promise.all([
+    // ... 原有的 margin 和 position 查询
+    publicClient.readContract({
+        address: EXCHANGE_ADDRESS,
+        abi: EXCHANGE_ABI,
+        functionName: 'markPrice',
+    }),
+    publicClient.readContract({
+        address: EXCHANGE_ADDRESS,
+        abi: EXCHANGE_ABI,
+        functionName: 'indexPrice',
+    }),
+]);
 
-const markPrice = await publicClient.readContract({
-    address: EXCHANGE_ADDRESS,
-    abi: EXCHANGE_ABI,
-    functionName: 'markPrice'
-});
+setMarkPrice(mPrice as bigint);
+setIndexPrice(iPrice as bigint);
 ```
 
 ---
@@ -392,24 +392,24 @@ Day 5 会使用这些价格实现"数据索引与 K 线"：
 
 ---
 
-## 9) 可选挑战 / 扩展（不影响主线）
+## 9) 进阶开发（必须完成）
 
 1. **实现完整的 Pyth 集成**
-   - 解析 Pyth 的 `expo` 指数字段
-   - 处理价格置信区间（confidence interval）
+   - 解析 Pyth 的 `expo` 指数字段。
+   - 处理价格置信区间（confidence interval）。
 
 2. **添加价格历史记录**
-   - 在合约中存储最近 N 次价格更新
-   - 实现 `getPriceHistory()` 视图函数
+   - 在合约中存储最近 N 次价格更新。
+   - 实现 `getPriceHistory()` 视图函数。
 
 3. **多资产价格支持**
-   - 修改合约支持多个交易对
-   - 每个交易对有独立的 `indexPrice` 和 `markPrice`
+   - 修改合约支持多个交易对。
+   - 每个交易对有独立的 `indexPrice` 和 `markPrice`。
 
 4. **价格延迟保护**
-   - 记录 `lastPriceUpdateTime`
-   - 如果价格超过 N 分钟未更新，阻止新订单
+   - 记录 `lastPriceUpdateTime`。
+   - 如果价格超过 N 分钟未更新，阻止新订单。
 
 5. **Keeper 高可用**
-   - 实现多 Keeper 竞争上链
-   - 添加价格有效性检查（与上次差异过大则跳过）
+   - 实现多 Keeper 竞争上链。
+   - 添加价格有效性检查（与上次差异过大则跳过）。

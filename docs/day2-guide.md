@@ -393,3 +393,32 @@ forge test --match-contract Day2OrderbookTest -vvv
 1. **`hint not last` 一直触发**：你没有正确校验/维护“同价尾部”，或插入逻辑没有把新单放到同价末尾。
 2. **链表断了/循环了**：检查 `incoming.next`、`bestBuyId/bestSellId`、`orders[prev].next` 的赋值顺序。
 3. **撤单后链表顺序错**：`_removeOrderFromList` 没处理“删除头节点”的情况，或没正确连接 `prev.next`。
+
+---
+
+## 9) 进阶：前端订单簿同步（Alignment）
+
+在 `useExchange.tsx` 中，由于合约只返回 `bestBuyId`，前端需要手动遍历链表来展示完整的买卖盘数据。
+
+```typescript
+const loadOrderChain = async (headId: bigint) => {
+    const list = [];
+    let curr = headId;
+    let limit = 0;
+    while (curr !== 0n && limit < 50) {
+        const order = await publicClient.readContract({
+            address: EXCHANGE_ADDRESS,
+            abi: EXCHANGE_ABI,
+            functionName: 'getOrder',
+            args: [curr],
+        });
+        list.push(order);
+        curr = order.next;
+        limit++;
+    }
+    return list;
+};
+```
+
+> [!TIP]
+> 这种“逐个读取”在生产环境压力较大，通常会配合 Indexer 或批量读取合约来优化速度。
