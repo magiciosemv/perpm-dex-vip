@@ -162,9 +162,6 @@ abstract contract ExchangeStorage is AccessControl, ReentrancyGuard {
     /// @notice 资金费率参数更新事件
     event FundingParamsUpdated(uint256 interval, int256 maxRatePerInterval);
     
-    /// @notice 清算事件
-    event Liquidated(address indexed trader, address indexed liquidator, uint256 reward, uint256 sentToFund);
-    
     /// @notice 资金费支付事件
     event FundingPaid(address indexed trader, int256 amount);
 

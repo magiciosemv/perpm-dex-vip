@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./utils/ExchangeFixture.sol";
-import "../../src/core/ExchangeStorage.sol";
+import "../src/core/ExchangeStorage.sol";
 // import "./mocks/MockPyth.sol";
 
 // Day 4: Pyth 价格更新（模板级别，使用本地 mock）

@@ -109,11 +109,11 @@ contract PositionMarginTest is Test {
             
             // 诊断信息
             aliceMargin = exchange.margin(alice);
-            MonadPerpExchange.Position memory alicePos = exchange.getPosition(alice);
+            MonadPerpExchange.Position memory alicePos2 = exchange.getPosition(alice);
             console.log("\nDiagnostics:");
             console.log("  Alice margin:", aliceMargin / 1e18, "ETH");
-            console.log("  Alice position size:", uint256(alicePos.size));
-            console.log("  Alice position entry:", alicePos.entryPrice / 1e18, "ETH");
+            console.log("  Alice position size:", uint256(alicePos2.size));
+            console.log("  Alice position entry:", alicePos2.entryPrice / 1e18, "ETH");
             
             // 计算理论保证金需求
             uint256 positionNotional = uint256(alicePos.size) * exchange.markPrice() / 1e18;
