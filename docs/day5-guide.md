@@ -87,6 +87,13 @@ type Candle @entity {
   volume: BigInt!
 }
 
+type Position @entity {
+  id: ID!
+  trader: Bytes!
+  size: BigInt!
+  entryPrice: BigInt!
+}
+
 type Order @entity {
   id: ID!
   trader: String!
@@ -104,6 +111,19 @@ type LatestCandle @entity {
   timestamp: Int!
 }
 ```
+
+---
+
+### Step 2.5: 生成类型定义 (Codegen)
+在编写代码之前，必须先根据 `config.yaml` 和 `schema.graphql` 生成 TypeScript 类型定义。
+
+```bash
+cd indexer
+pnpm codegen
+```
+
+> [!IMPORTANT]
+> 每当你修改了 `config.yaml` 或 `schema.graphql`，都必须重新运行 `pnpm codegen`，否则 `src/EventHandlers.ts` 会报错找不到类型。
 
 ---
 
@@ -179,25 +199,46 @@ Exchange.OrderRemoved.handler(async ({ event, context }) => {
 
 ```typescript
 Exchange.TradeExecuted.handler(async ({ event, context }) => {
-    // TODO Step 1: 创建 Trade 记录
-    // const trade: Trade = { ... };
-    // context.Trade.set(trade);
+    // 1. 创建 Trade 记录
+    const trade: Trade = {
+        id: `${event.transaction.hash}-${event.logIndex}`,
+        buyer: event.params.buyer,
+        seller: event.params.seller,
+        price: event.params.price,
+        amount: event.params.amount,
+        timestamp: event.block.timestamp,
+        txHash: event.transaction.hash,
+        buyOrderId: event.params.buyOrderId,
+        sellOrderId: event.params.sellOrderId,
+    };
+    context.Trade.set(trade);
 
-    // TODO Step 2: 更新买卖双方的 Order 剩余数量
-    // const buyOrder = await context.Order.get(event.params.buyOrderId.toString());
-    // if (buyOrder) {
-    //     const newAmount = buyOrder.amount - event.params.amount;
-    //     context.Order.set({
-    //         ...buyOrder,
-    //         amount: newAmount,
-    //         status: newAmount === 0n ? "FILLED" : "OPEN",
-    //     });
-    // }
+    // 2. 更新买卖双方的 Order 剩余数量
+    const buyOrder = await context.Order.get(event.params.buyOrderId.toString());
+    if (buyOrder) {
+        const newAmount = buyOrder.amount - event.params.amount;
+        context.Order.set({
+            ...buyOrder,
+            amount: newAmount,
+            status: newAmount === 0n ? "FILLED" : "OPEN",
+        });
+    }
 
-    // TODO Step 3: 更新 K 线 (Candle)
-    // 见下一节详细说明
+    const sellOrder = await context.Order.get(event.params.sellOrderId.toString());
+    if (sellOrder) {
+        const newAmount = sellOrder.amount - event.params.amount;
+        context.Order.set({
+            ...sellOrder,
+            amount: newAmount,
+            status: newAmount === 0n ? "FILLED" : "OPEN",
+        });
+    }
 
-    // TODO Step 4: 更新 Position（见 Step 5）
+    // 3. 更新 K 线 (Candle)
+    // TODO: 将在 Step 4 中实现 K 线更新逻辑...
+
+    // 4. 更新 Position (持仓)
+    // TODO: 将在 Step 5 中实现持仓更新逻辑...
 });
 ```
 
@@ -209,8 +250,9 @@ Exchange.TradeExecuted.handler(async ({ event, context }) => {
 K 线的关键是按时间窗口聚合交易数据：
 
 ```typescript
-// 1 分钟 K 线
+// 3. 更新 K 线 (1m)
 const resolution = "1m";
+// 向下取整到最近的分钟
 const timestamp = event.block.timestamp - (event.block.timestamp % 60);
 const candleId = `${resolution}-${timestamp}`;
 
@@ -234,10 +276,13 @@ if (!existingCandle) {
     context.Candle.set(candle);
 } else {
     // 更新现有 K 线
+    const newHigh = event.params.price > existingCandle.highPrice ? event.params.price : existingCandle.highPrice;
+    const newLow = event.params.price < existingCandle.lowPrice ? event.params.price : existingCandle.lowPrice;
+
     context.Candle.set({
         ...existingCandle,
-        highPrice: event.params.price > existingCandle.highPrice ? event.params.price : existingCandle.highPrice,
-        lowPrice: event.params.price < existingCandle.lowPrice ? event.params.price : existingCandle.lowPrice,
+        highPrice: newHigh,
+        lowPrice: newLow,
         closePrice: event.params.price,
         volume: existingCandle.volume + event.params.amount,
     });
@@ -255,73 +300,18 @@ context.LatestCandle.set({
 
 ### Step 5: 实现 Position 更新逻辑
 
-在 TradeExecuted handler 中，还需要更新买卖双方的持仓记录：
+// 在 TradeExecuted handler 中，不需要再手动计算 Position 更新
+// 只需要监听 PositionUpdated 事件即可
 
-```typescript
-// 在 TradeExecuted handler 末尾调用
-await updatePosition(context, event.params.buyer, true, event.params.amount, event.params.price);
-await updatePosition(context, event.params.seller, false, event.params.amount, event.params.price);
-```
-
-实现 `updatePosition` 辅助函数：
-
-```typescript
-async function updatePosition(context: any, trader: string, isBuy: boolean, amount: bigint, price: bigint) {
-    const existingPosition = await context.Position.get(trader);
-    let position: any;
-
-    if (!existingPosition) {
-        position = {
-            id: trader,
-            trader,
-            size: 0n,
-            entryPrice: 0n,
-            realizedPnl: 0n,
-        };
-    } else {
-        position = { ...existingPosition };
-    }
-
-    const signedAmount = isBuy ? amount : -amount;
-    const currentSize = position.size;
-
-    // 加仓逻辑：同方向增加持仓
-    if (currentSize === 0n || (currentSize > 0n && isBuy) || (currentSize < 0n && !isBuy)) {
-        const totalSize = currentSize + signedAmount;
-        const absTotalSize = totalSize > 0n ? totalSize : -totalSize;
-        const absCurrentSize = currentSize > 0n ? currentSize : -currentSize;
-
-        // 加权平均入场价
-        if (absTotalSize > 0n) {
-            const oldVal = BigInt(absCurrentSize) * BigInt(position.entryPrice);
-            const newVal = BigInt(amount) * BigInt(price);
-            position.entryPrice = (oldVal + newVal) / BigInt(absTotalSize);
-        } else {
-            position.entryPrice = 0n;
-        }
-        position.size = totalSize;
-    } else {
-        // 平仓逻辑：反方向减少持仓
-        const absCurrentSize = currentSize > 0n ? currentSize : -currentSize;
-        const closeAmount = amount > absCurrentSize ? absCurrentSize : amount;
-
-        let pnl = 0n;
-        if (currentSize > 0n) { // 平多
-            pnl = ((price - position.entryPrice) * closeAmount) / (10n ** 18n);
-        } else { // 平空
-            pnl = ((position.entryPrice - price) * closeAmount) / (10n ** 18n);
-        }
-
-        position.realizedPnl += pnl;
-        position.size += signedAmount;
-
-        if (position.size === 0n) {
-            position.entryPrice = 0n;
-        }
-    }
-
-    context.Position.set(position);
-}
+Exchange.PositionUpdated.handler(async ({ event, context }) => {
+    const entity: Position = {
+        id: event.params.trader,
+        trader: event.params.trader,
+        size: event.params.size,
+        entryPrice: event.params.entryPrice,
+    };
+    context.Position.set(entity);
+});
 ```
 
 ---
@@ -373,7 +363,6 @@ query {
     trader
     size
     entryPrice
-    realizedPnl
   }
 }
 ```

@@ -210,6 +210,9 @@ function _updatePosition(
         if (p.size > 0) p.size -= int256(closing);
         else p.size += int256(closing);
     }
+    
+    // Day 5 优化：发出 PositionUpdated 事件，简化 Indexer 逻辑
+    emit PositionUpdated(trader, p.size, p.entryPrice);
 }
 ```
 
