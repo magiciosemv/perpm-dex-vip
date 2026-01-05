@@ -458,9 +458,25 @@ forge test --match-contract Day2OrderbookTest -vvv
 
 ## 7) Indexer：索引订单事件
 
-Day 2 的合约会触发 `OrderPlaced` 和 `OrderRemoved` 事件，我们需要在 Indexer 中处理它们。
+Day 2 的合约会触发 `OrderPlaced` 和 `OrderRemoved` 事件，需要在 Indexer 中处理。
 
-### Step 1: 定义 Order Schema
+### Step 1: 配置事件（config.yaml）
+
+在 `indexer/config.yaml` 的 `events` 列表中添加订单事件：
+
+```yaml
+contracts:
+  - name: Exchange
+    handler: src/EventHandlers.ts
+    events:
+      - event: MarginDeposited(address indexed trader, uint256 amount)
+      - event: MarginWithdrawn(address indexed trader, uint256 amount)
+      # Day 2: 添加订单事件
+      - event: OrderPlaced(uint256 indexed id, address indexed trader, bool isBuy, uint256 price, uint256 amount)
+      - event: OrderRemoved(uint256 indexed id)
+```
+
+### Step 2: 定义 Order Schema
 
 在 `indexer/schema.graphql` 中添加（Day 1 已有 MarginEvent）：
 
@@ -477,7 +493,7 @@ type Order @entity {
 }
 ```
 
-### Step 2: 实现 Order Event Handlers
+### Step 3: 实现 Order Event Handlers
 
 在 `indexer/src/EventHandlers.ts` 中添加：
 
@@ -507,7 +523,9 @@ Exchange.OrderRemoved.handler(async ({ event, context }) => {
 });
 ```
 
-### Step 3: 验证 Indexer
+### Step 4: 验证 Indexer
+
+运行 `pnpm codegen` 后启动 Indexer，验证查询：
 
 ```graphql
 query {
@@ -523,40 +541,48 @@ query {
 
 ---
 
-## 8) 前端：订单簿与下单组件
+## 8) 前端：实现下单功能
 
-### 8.1 OrderForm 组件关键代码
+### Step 1: 实现 placeOrder 函数
 
-`frontend/components/OrderForm.tsx` 中的下单逻辑：
+修改 `frontend/store/exchangeStore.tsx`，实现 `placeOrder` 函数：
 
 ```typescript
-const handleSubmit = async () => {
-    // 1. 输入验证
-    if (isNaN(price) || isNaN(amount) || price <= 0 || amount <= 0) {
-        setError("请输入有效的价格和数量");
-        return;
-    }
-    
-    // 2. 转换为 Wei
-    const priceWei = parseEther(price.toString());
-    const amountWei = parseEther(amount.toString());
-    
-    // 3. 调用合约
-    const hash = await walletClient.writeContract({
-        address: EXCHANGE_ADDRESS,
-        abi: EXCHANGE_ABI,
-        functionName: 'placeOrder',
-        args: [isBuy, priceWei, amountWei, 0n],  // hintId = 0
-    });
-    
-    await publicClient.waitForTransactionReceipt({ hash });
-    refresh();
-};
+placeOrder = async (params: { side: OrderSide; orderType?: OrderType; price?: string; amount: string; hintId?: string }) => {
+  const { side, orderType = OrderType.LIMIT, price, amount, hintId } = params;
+  if (!this.walletClient || !this.account) throw new Error('Connect wallet before placing orders');
+
+  // 处理市价单：使用 markPrice 加滑点
+  const currentPrice = this.markPrice > 0n ? this.markPrice : parseEther('1500');
+  const parsedPrice = price ? parseEther(price) : currentPrice;
+  const effectivePrice =
+    orderType === OrderType.MARKET
+      ? side === OrderSide.BUY
+        ? currentPrice + parseEther('100')  // 买单加滑点
+        : currentPrice - parseEther('100') > 0n ? currentPrice - parseEther('100') : 1n
+      : parsedPrice;
+
+  const parsedAmount = parseEther(amount);
+  const parsedHint = hintId ? BigInt(hintId) : 0n;
+
+  const hash = await this.walletClient.writeContract({
+    account: this.account,
+    address: this.ensureContract(),
+    abi: EXCHANGE_ABI,
+    functionName: 'placeOrder',
+    args: [side === OrderSide.BUY, effectivePrice, parsedAmount, parsedHint],
+    chain: undefined,
+  } as any);
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') throw new Error('Transaction failed');
+  await this.refresh();
+}
 ```
 
-### 8.2 从 Indexer 获取订单簿（推荐）
+### Step 2: 从 Indexer 获取订单簿
 
-相比链上遍历，Indexer 查询更高效：
+通过 GraphQL 查询获取订单簿数据，比链上遍历效率高 10-100 倍：
 
 ```typescript
 const GET_ORDERBOOK = gql`
@@ -571,27 +597,5 @@ const GET_ORDERBOOK = gql`
 `;
 ```
 
-> [!TIP]
-> 使用 Indexer 查询订单比链上遍历链表快 10-100 倍，且不消耗 Gas。
-
-### 8.3 链上遍历（备用方案）
-
-如果 Indexer 不可用，可以直接从链上遍历：
-
-```typescript
-const loadOrderChain = async (headId: bigint) => {
-    const list = [];
-    let curr = headId;
-    while (curr !== 0n && list.length < 50) {
-        const order = await publicClient.readContract({
-            address: EXCHANGE_ADDRESS,
-            abi: EXCHANGE_ABI,
-            functionName: 'getOrder',
-            args: [curr],
-        });
-        list.push(order);
-        curr = order.next;
-    }
-    return list;
-};
-```
+> [!NOTE]
+> Indexer 查询不消耗 Gas，适合高频读取场景。

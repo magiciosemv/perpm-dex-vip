@@ -370,30 +370,19 @@ class ExchangeStore {
     throw new Error('withdraw 功能尚未实现，请完成 Day1 练习');
   };
 
+  // ============================================
+  // Day 2 TODO: 实现下单函数
+  // ============================================
   placeOrder = async (params: { side: OrderSide; orderType?: OrderType; price?: string; amount: string; hintId?: string }) => {
-    const { side, orderType = OrderType.LIMIT, price, amount, hintId } = params;
-    if (!this.walletClient || !this.account) throw new Error('Connect wallet before placing orders');
-    const currentPrice = this.markPrice > 0n ? this.markPrice : parseEther('1500'); // Default to 1500 if no mark
-    const parsedPrice = price ? parseEther(price) : currentPrice;
-    const effectivePrice =
-      orderType === OrderType.MARKET
-        ? side === OrderSide.BUY
-          ? currentPrice + parseEther('100') // Aggressive slippage for market buy
-          : currentPrice - parseEther('100') > 0n ? currentPrice - parseEther('100') : 1n
-        : parsedPrice;
-    const parsedAmount = parseEther(amount);
-    const parsedHint = hintId ? BigInt(hintId) : 0n;
-    const hash = await this.walletClient.writeContract({
-      account: this.account,
-      address: this.ensureContract(),
-      abi: EXCHANGE_ABI,
-      functionName: 'placeOrder',
-      args: [side === OrderSide.BUY, effectivePrice, parsedAmount, parsedHint],
-      chain: undefined,
-    } as any);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    if (receipt.status !== 'success') throw new Error('Transaction failed');
-    await this.refresh();
+    // TODO: Day 2 - 实现下单功能
+    // 步骤:
+    // 1. 检查钱包连接: if (!this.walletClient || !this.account) throw new Error(...)
+    // 2. 解析参数: const { side, orderType, price, amount, hintId } = params
+    // 3. 处理市价单价格（使用 markPrice 加滑点）
+    // 4. 调用合约 placeOrder(isBuy, price, amount, hintId)
+    // 5. 等待交易确认并刷新数据
+
+    throw new Error('placeOrder 功能尚未实现，请完成 Day2 练习');
   }
 
   cancelOrder = async (orderId: bigint) => {
