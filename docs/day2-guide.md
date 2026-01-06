@@ -543,6 +543,7 @@ Exchange.OrderRemoved.handler(async ({ event, context }) => {
         context.Order.set({
             ...order,
             status: order.amount === 0n ? "FILLED" : "CANCELLED",
+            amount: 0n, // 清零以便 GET_OPEN_ORDERS 过滤
         });
     }
 });
@@ -685,7 +686,8 @@ import { client, GET_CANDLES, GET_RECENT_TRADES, GET_POSITIONS, GET_OPEN_ORDERS 
 ```typescript
 // Day 2: 从 Indexer 获取用户的 OPEN 订单
 loadMyOrders = async (trader: Address): Promise<OpenOrder[]> => {
-  const result = await client.query(GET_OPEN_ORDERS, { trader }).toPromise();
+  // 注意: indexer 存储的地址是小写格式，需要转换
+  const result = await client.query(GET_OPEN_ORDERS, { trader: trader.toLowerCase() }).toPromise();
   const orders = result.data?.Order || [];
   return orders.map((o: any) => ({
     id: BigInt(o.id),

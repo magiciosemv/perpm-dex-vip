@@ -263,15 +263,6 @@ if (diff < -clampRange) diff = -clampRange;
 this.fundingRate = premiumIndex + diff;
 ```
 
-#### 6.2 在组件中计算强平价格
-在 `Positions.tsx` 中，根据保证金和持仓计算预估强平价：
-
-```typescript
-// 多头强平价公式 (简化版): LiqPrice = (Entry*Size - Margin) / (Size * (1 - MM))
-const mmRatio = 0.005; // 0.5% 维持保证金
-const liqPrice = (entry * size - effectiveMargin) / (size * (1 - mmRatio));
-```
-
 ---
 
 ## 5) 解析：为什么这样写
@@ -672,31 +663,6 @@ if (diff < -clampRange) diff = -clampRange;
 this.fundingRate = premiumIndex + diff;
 ```
 
-### 9.2 强平价格计算
-
-在 `Positions.tsx` 中：
-
-```typescript
-// 多头强平价公式 (简化版)
-// LiqPrice = Entry - (Margin / Size) * (1 - MMR - LiqFee)
-const mmRatio = 0.005;   // 0.5% 维持保证金
-const liqFee = 0.0125;   // 1.25% 清算费
-
-const liqPrice = isLong
-    ? entryPrice * (1 - (margin / notional) * (1 - mmRatio - liqFee))
-    : entryPrice * (1 + (margin / notional) * (1 - mmRatio - liqFee));
-```
-
-### 9.3 资金费倒计时
-
-```typescript
-// 显示距下次结算时间
-const nextFunding = lastFundingTime + fundingInterval;
-const remaining = nextFunding - Math.floor(Date.now() / 1000);
-const minutes = Math.floor(remaining / 60);
-const seconds = remaining % 60;
-```
-
 ---
 
 ## 10) 小结 & 为 Day 7 铺垫
@@ -707,7 +673,7 @@ const seconds = remaining % 60;
 - `_applyFunding()`：用户级资金费结算
 - `_unrealizedPnl()`：未实现盈亏计算
 - Indexer：索引 `FundingUpdated` 和 `FundingPaid` 事件
-- 前端：显示资金费率和强平价格
+- 前端：显示资金费率
 
 Day 7 会在此基础上实现"清算系统"：
 
