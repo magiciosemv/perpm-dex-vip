@@ -77,3 +77,19 @@ export const GET_OPEN_ORDERS = `
     }
   }
 `;
+
+// Day 5: 查询用户的成交历史（作为 buyer 或 seller）
+export const GET_MY_TRADES = `
+  query GetMyTrades($trader: String!) {
+    Trade(where: { _or: [{ buyer: { _eq: $trader } }, { seller: { _eq: $trader } }] }, order_by: { timestamp: desc }, limit: 50) {
+      id
+      price
+      amount
+      buyer
+      seller
+      timestamp
+      buyOrderId
+      sellOrderId
+    }
+  }
+`;

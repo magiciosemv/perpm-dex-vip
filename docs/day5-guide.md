@@ -104,127 +104,18 @@ pnpm codegen
 
 ---
 
-### Step 3: 实现 Event Handlers
+### Step 3: 在 TradeExecuted Handler 中添加 K 线逻辑
+
+Day 3 已实现 TradeExecuted handler 的基础部分（Trade 记录 + Order 更新）。现在在该 handler 末尾（`context.Trade.set(trade);` 之后）添加 K 线聚合逻辑：
 
 修改：
 
 - `indexer/src/EventHandlers.ts`
 
-#### 3.1 MarginDeposited Handler
+找到 `Exchange.TradeExecuted.handler`，在 `context.Trade.set(trade);` 后添加：
 
 ```typescript
-Exchange.MarginDeposited.handler(async ({ event, context }) => {
-    const entity: MarginEvent = {
-        id: `${event.transaction.hash}-${event.logIndex}`,
-        trader: event.params.trader,
-        amount: event.params.amount,
-        eventType: "DEPOSIT",
-        timestamp: event.block.timestamp,
-    };
-    context.MarginEvent.set(entity);
-});
-```
-
-#### 3.1.1 MarginWithdrawn Handler
-
-```typescript
-Exchange.MarginWithdrawn.handler(async ({ event, context }) => {
-    const entity: MarginEvent = {
-        id: `${event.transaction.hash}-${event.logIndex}`,
-        trader: event.params.trader,
-        amount: event.params.amount,
-        eventType: "WITHDRAW",
-        timestamp: event.block.timestamp,
-    };
-    context.MarginEvent.set(entity);
-});
-```
-
-#### 3.2 OrderPlaced Handler
-
-```typescript
-Exchange.OrderPlaced.handler(async ({ event, context }) => {
-    const order: Order = {
-        id: event.params.id.toString(),
-        trader: event.params.trader,
-        isBuy: event.params.isBuy,
-        price: event.params.price,
-        initialAmount: event.params.amount,
-        amount: event.params.amount,
-        status: "OPEN",
-        timestamp: event.block.timestamp,
-    };
-    context.Order.set(order);
-});
-```
-
-#### 3.2.1 OrderRemoved Handler
-
-```typescript
-Exchange.OrderRemoved.handler(async ({ event, context }) => {
-    const order = await context.Order.get(event.params.id.toString());
-    if (order) {
-        context.Order.set({
-            ...order,
-            status: order.amount === 0n ? "FILLED" : "CANCELLED",
-        });
-    }
-});
-```
-
-#### 3.3 TradeExecuted Handler（核心）
-
-```typescript
-Exchange.TradeExecuted.handler(async ({ event, context }) => {
-    // 1. 创建 Trade 记录
-    const trade: Trade = {
-        id: `${event.transaction.hash}-${event.logIndex}`,
-        buyer: event.params.buyer,
-        seller: event.params.seller,
-        price: event.params.price,
-        amount: event.params.amount,
-        timestamp: event.block.timestamp,
-        txHash: event.transaction.hash,
-        buyOrderId: event.params.buyOrderId,
-        sellOrderId: event.params.sellOrderId,
-    };
-    context.Trade.set(trade);
-
-    // 2. 更新买卖双方的 Order 剩余数量
-    const buyOrder = await context.Order.get(event.params.buyOrderId.toString());
-    if (buyOrder) {
-        const newAmount = buyOrder.amount - event.params.amount;
-        context.Order.set({
-            ...buyOrder,
-            amount: newAmount,
-            status: newAmount === 0n ? "FILLED" : "OPEN",
-        });
-    }
-
-    const sellOrder = await context.Order.get(event.params.sellOrderId.toString());
-    if (sellOrder) {
-        const newAmount = sellOrder.amount - event.params.amount;
-        context.Order.set({
-            ...sellOrder,
-            amount: newAmount,
-            status: newAmount === 0n ? "FILLED" : "OPEN",
-        });
-    }
-
-    // 3. 更新 K 线 (Candle)
-    // TODO: Day 5 - 将在 Step 4 中实现 K 线更新逻辑
-});
-```
-
-
----
-
-### Step 4: 实现 K 线（Candle）更新逻辑
-
-K 线的关键是按时间窗口聚合交易数据：
-
-```typescript
-// 3. 更新 K 线 (1m)
+    // Day 5: 更新 K 线 (1m)
 const resolution = "1m";
 // 向下取整到最近的分钟
 const timestamp = event.block.timestamp - (event.block.timestamp % 60);
@@ -386,6 +277,42 @@ loadCandles = async () => {
 ```typescript
 await this.loadTrades();
 this.loadCandles();
+```
+
+#### 6.4 实现用户成交历史 (loadMyTrades)
+
+`loadTrades` 获取的是全市场最近 50 条成交，但用户在前端的 "History" 标签页需要看到**自己的成交历史**。如果用户的成交不在最近 50 条中，就无法显示。
+
+脚手架已在 `IndexerClient.ts` 中定义了 `GET_MY_TRADES` 查询，你需要在 `exchangeStore.tsx` 中实现 `loadMyTrades` 方法：
+
+```typescript
+loadMyTrades = async (trader: Address): Promise<Trade[]> => {
+    const result = await client.query(GET_MY_TRADES, { trader: trader.toLowerCase() }).toPromise();
+    if (!result.data?.Trade) return [];
+    const trades = result.data.Trade.map((t: any) => ({
+        id: t.id,
+        price: Number(formatEther(t.price)),
+        amount: Number(formatEther(t.amount)),
+        time: new Date(t.timestamp * 1000).toLocaleTimeString(),
+        side: t.buyer.toLowerCase() === trader.toLowerCase() ? 'buy' : 'sell',
+    }));
+    runInAction(() => { this.myTrades = trades; });
+    return trades;
+};
+```
+
+**关键点**：
+- 使用 `GET_MY_TRADES` 查询，它会筛选 `buyer` 或 `seller` 等于当前用户的成交
+- `side` 判断逻辑：如果用户是买方 (`buyer`)，则显示为 `'buy'`；否则为 `'sell'`
+- 注意地址需要转为小写 `trader.toLowerCase()`，因为 Indexer 存储的地址是小写格式
+
+然后在 `refresh()` 方法中调用（在获取 `myOrders` 的逻辑附近）：
+
+```typescript
+if (this.account) {
+    // ... loadMyOrders 调用 ...
+    await this.loadMyTrades(this.account);
+}
 ```
 
 ---

@@ -6,7 +6,9 @@ import { OrderSide } from '../types';
 
 export const Positions: React.FC = observer(() => {
   const [activeTab, setActiveTab] = useState('positions');
-  const { account, position, margin, markPrice, trades, myOrders, syncing, refresh, cancelOrder, cancellingOrderId } = useExchangeStore();
+  // Day 5: 完成 loadMyTrades 后，myTrades 将从 Indexer 获取用户成交历史
+  // 脚手架状态下 myTrades 为空数组，History 标签页不会显示数据
+  const { position, margin, markPrice, myOrders, myTrades, syncing, refresh, cancelOrder, cancellingOrderId } = useExchangeStore();
   const store = useExchangeStore();
 
   const displayPosition = useMemo(() => {
@@ -69,13 +71,6 @@ export const Positions: React.FC = observer(() => {
       side: size >= 0 ? 'long' : 'short',
     };
   }, [margin, markPrice, position, store.initialMarginBps]);
-
-  const myTrades = useMemo(() => {
-    const viewer = account?.toLowerCase();
-    return trades.filter((t) =>
-      viewer ? t.buyer?.toLowerCase() === viewer || t.seller?.toLowerCase() === viewer : true,
-    );
-  }, [account, trades]);
 
   return (
     <div className="bg-[#10121B] rounded-xl border border-white/5 p-4 h-full flex flex-col">

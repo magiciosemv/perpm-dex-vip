@@ -6,7 +6,7 @@ import { EXCHANGE_ADDRESS, EXCHANGE_DEPLOY_BLOCK } from '../onchain/config';
 import { chain, getWalletClient, publicClient, fallbackAccount, ACCOUNTS } from '../onchain/client';
 import { OrderBookItem, OrderSide, OrderType, PositionSnapshot, Trade, CandleData } from '../types';
 // Day 2 TODO: 取消注释以启用 IndexerClient
-// import { client, GET_CANDLES, GET_RECENT_TRADES, GET_POSITIONS, GET_OPEN_ORDERS } from './IndexerClient';
+// import { client, GET_CANDLES, GET_RECENT_TRADES, GET_POSITIONS, GET_OPEN_ORDERS, GET_MY_TRADES } from './IndexerClient';
 
 type OrderStruct = {
   id: bigint;
@@ -48,6 +48,7 @@ class ExchangeStore {
   trades: Trade[] = [];
   candles: CandleData[] = [];
   myOrders: OpenOrder[] = [];
+  myTrades: Trade[] = [];
   syncing = false;
   cancellingOrderId?: bigint; // Day 2: 正在取消的订单 ID
   error?: string;
@@ -238,6 +239,20 @@ class ExchangeStore {
     return []; // TODO: 移除这行，实现上面的逻辑
   };
 
+  // ============================================
+  // Day 5 TODO: 从 Indexer 获取用户的成交历史
+  // ============================================
+  loadMyTrades = async (trader: Address): Promise<Trade[]> => {
+    // TODO: Day 5 - 实现从 Indexer 获取用户成交历史
+    // 步骤:
+    // 1. 使用 client.query(GET_MY_TRADES, { trader: trader.toLowerCase() }).toPromise() 查询
+    // 2. 从 result.data?.Trade 获取成交数组
+    // 3. 转换为 Trade 格式 (id, price, amount, time, side)
+    // 4. side 判断: t.buyer.toLowerCase() === trader.toLowerCase() ? 'buy' : 'sell'
+    // 5. 使用 runInAction 更新 this.myTrades
+    return [];
+  };
+
   refresh = async (silent = false) => {
     try {
       if (!silent) {
@@ -369,6 +384,14 @@ class ExchangeStore {
       runInAction(() => {
         this.myOrders = [];
       });
+
+      // ============================================
+      // Day 5 TODO: 从 Indexer 获取我的成交历史
+      // ============================================
+      // TODO: Day 5 - 调用 loadMyTrades 获取用户成交历史
+      // if (this.account) {
+      //   await this.loadMyTrades(this.account);
+      // }
     } catch (e) {
       if (!silent) {
         runInAction(() => (this.error = (e as Error)?.message || 'Failed to sync exchange data'));
