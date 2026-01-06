@@ -627,45 +627,31 @@ curl -s -X POST http://localhost:8080/v1/graphql \
 
 ### 9.1 RecentTrades 组件（从 Indexer 获取）
 
-在 `frontend/components/RecentTrades.tsx` 或 `frontend/store/exchangeStore.tsx` 中：
+项目中已封装好 `IndexerClient`（见 `frontend/store/IndexerClient.ts`），使用方式：
 
 ```typescript
-const GET_RECENT_TRADES = gql`
-  query {
-    Trade(limit: 20, orderBy: timestamp, orderDirection: desc) {
-      id
-      buyer
-      seller
-      price
-      amount
-      timestamp
-    }
-  }
-`;
+import { client, GET_RECENT_TRADES } from './IndexerClient';
 
-// 在组件中使用
-const trades = result.data.Trade.map((t: any) => ({
-    price: formatEther(t.price),
-    amount: formatEther(t.amount),
-    time: new Date(t.timestamp * 1000).toLocaleTimeString(),
-    side: BigInt(t.buyOrderId) > BigInt(t.sellOrderId) ? 'buy' : 'sell',
-}));
+// 查询最近成交
+const result = await client.query(GET_RECENT_TRADES, {}).toPromise();
+if (result.data?.Trade) {
+    const trades = result.data.Trade.map((t: any) => ({
+        price: formatEther(t.price),
+        amount: formatEther(t.amount),
+        time: new Date(t.timestamp * 1000).toLocaleTimeString(),
+        side: BigInt(t.buyOrderId) > BigInt(t.sellOrderId) ? 'buy' : 'sell',
+    }));
+}
 ```
 
 ### 9.2 Positions 组件（从 Indexer 或链上获取）
 
 ```typescript
 // 方式 A：从 Indexer 获取
-const GET_POSITION = gql`
-  query GetPosition($trader: String!) {
-    Position(where: { trader: $trader }) {
-      size
-      entryPrice
-    }
-  }
-`;
+import { client, GET_POSITIONS } from './IndexerClient';
+const result = await client.query(GET_POSITIONS, { trader: account }).toPromise();
 
-// 方式 B：从链上获取（更实时）
+// 方式 B：从链上获取（更实时，推荐）
 const pos = await publicClient.readContract({
     address: EXCHANGE_ADDRESS,
     abi: EXCHANGE_ABI,

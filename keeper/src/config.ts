@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
 
-export const RPC_URL = process.env.RPC_URL || 'http://127.0.0.1:8545';
-export const PRIVATE_KEY = process.env.PRIVATE_KEY || '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // Anvil Account #0
-export const EXCHANGE_ADDRESS = process.env.EXCHANGE_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+// 优先读取 frontend/.env.local（部署脚本自动更新）
+dotenv.config({ path: path.resolve(__dirname, '../../frontend/.env.local') });
+
+export const RPC_URL = process.env.VITE_RPC_URL || 'http://127.0.0.1:8545';
+export const PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // Anvil Account #0 (Operator)
+export const EXCHANGE_ADDRESS = process.env.VITE_EXCHANGE_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';

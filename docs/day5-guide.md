@@ -59,25 +59,17 @@ Indexer 的作用是：
 
 ---
 
-### Step 2: 查看 Schema 定义
+### Step 2: 添加 K 线 Schema 定义
 
-打开 `indexer/schema.graphql`，你会看到以下实体：
+修改：
+- `indexer/schema.graphql`
+
+Day 1-3 已经定义了 `MarginEvent`、`Order`、`Trade`、`Position` 实体。Day 5 需要**新增**以下两个实体来支持 K 线功能：
 
 ```graphql
-type Trade @entity {
-  id: ID!
-  buyer: String!
-  seller: String!
-  price: BigInt!
-  amount: BigInt!
-  timestamp: Int!
-  txHash: String!
-  buyOrderId: BigInt!
-  sellOrderId: BigInt!
-}
-
+# Day 5: Candle - K 线数据
 type Candle @entity {
-  id: ID! # "1m-timestamp"
+  id: ID!  # "1m-timestamp"
   resolution: String!
   timestamp: Int!
   openPrice: BigInt!
@@ -87,30 +79,15 @@ type Candle @entity {
   volume: BigInt!
 }
 
-type Position @entity {
-  id: ID!
-  trader: Bytes!
-  size: BigInt!
-  entryPrice: BigInt!
-}
-
-type Order @entity {
-  id: ID!
-  trader: String!
-  isBuy: Boolean!
-  price: BigInt!
-  initialAmount: BigInt!
-  amount: BigInt!
-  status: String! # OPEN, FILLED, CANCELLED
-  timestamp: Int!
-}
-
+# Day 5: LatestCandle - 最新价格状态（用于新 K 线的 open 价格）
 type LatestCandle @entity {
-  id: ID! # "1"
+  id: ID!  # "1"
   closePrice: BigInt!
   timestamp: Int!
 }
 ```
+
+将上述代码添加到 `schema.graphql` 文件末尾。
 
 ---
 
@@ -235,10 +212,7 @@ Exchange.TradeExecuted.handler(async ({ event, context }) => {
     }
 
     // 3. 更新 K 线 (Candle)
-    // TODO: 将在 Step 4 中实现 K 线更新逻辑...
-
-    // 4. 更新 Position (持仓)
-    // TODO: 将在 Step 5 中实现持仓更新逻辑...
+    // TODO: Day 5 - 将在 Step 4 中实现 K 线更新逻辑
 });
 ```
 
@@ -298,25 +272,7 @@ context.LatestCandle.set({
 
 ---
 
-### Step 5: 实现 Position 更新逻辑
-
-// 在 TradeExecuted handler 中，不需要再手动计算 Position 更新
-// 只需要监听 PositionUpdated 事件即可
-
-Exchange.PositionUpdated.handler(async ({ event, context }) => {
-    const entity: Position = {
-        id: event.params.trader,
-        trader: event.params.trader,
-        size: event.params.size,
-        entryPrice: event.params.entryPrice,
-    };
-    context.Position.set(entity);
-});
-```
-
----
-
-### Step 6: 启动 Indexer
+### Step 5: 启动 Indexer
 
 ```bash
 # 安装依赖
@@ -369,11 +325,11 @@ query {
 
 ---
 
-### Step 7: 前端数据抓取 (Store 逻辑)
+### Step 6: 前端数据抓取 (Store 逻辑)
 
 在 `frontend/store/exchangeStore.tsx` 中，我们需要通过 GraphQL 客户端抓取索引器的数据。
 
-#### 7.1 抓取成交历史
+#### 6.1 抓取成交历史
 ```typescript
 loadTrades = async (): Promise<Trade[]> => {
     const result = await client.query(GET_RECENT_TRADES, {}).toPromise();
@@ -388,7 +344,7 @@ loadTrades = async (): Promise<Trade[]> => {
 };
 ```
 
-#### 7.2 抓取 K 线数据
+#### 6.2 抓取 K 线数据
 ```typescript
 loadCandles = async () => {
     const result = await client.query(GET_CANDLES, {}).toPromise();
@@ -403,6 +359,16 @@ loadCandles = async () => {
         this.candles = candles;
     }
 };
+```
+
+#### 6.3 启用数据加载
+
+在 `refresh()` 方法中，找到以下被注释的代码并取消注释：
+
+```typescript
+// 取消这两行的注释以启用 Indexer 数据加载
+await this.loadTrades(this.account);
+this.loadCandles();
 ```
 
 ---
@@ -442,30 +408,139 @@ K2: [O=102, ...]  ← 继承 K1 的 close
 
 ## 6) 测试与验证
 
-### 6.1 Indexer 验证
+### 6.1 启动服务
 
 ```bash
-# 启动完整环境
-./quickstart.sh
+# 终端 1：启动 Anvil 并部署合约
+./scripts/run-anvil-deploy.sh
 
-# 打开 GraphQL Playground
-open http://localhost:8080/graphql
+# 终端 2：启动 Indexer（需要先运行 codegen）
+cd indexer && pnpm codegen && pnpm dev
+
+# 终端 3：启动 Keeper（价格服务）
+cd keeper && pnpm start
+
+# 终端 4：启动前端
+cd frontend && pnpm dev
 ```
 
-执行查询确认数据：
+### 6.2 初始化测试数据
 
-```graphql
-{ trades { id price amount } }
-{ candles { timestamp openPrice closePrice } }
+等待所有服务就绪后，运行数据初始化脚本：
+
+```bash
+./scripts/seed.sh
 ```
 
-### 6.2 前端验证
+该脚本会自动：
+- 读取部署的合约地址
+- 为 Alice 和 Bob 充值保证金
+- 设置初始价格
+- 执行多笔成交（生成多根 K 线）
+- 创建部分成交订单
 
-打开 `http://localhost:3000`，验证：
+### 6.3 GraphQL 验证
 
-1. **Recent Trades** 列表显示成交记录
-2. **K 线图表** 显示价格走势（如果已集成）
-3. 下一笔交易后，刷新页面确认数据更新
+**查询 Trade（成交记录）**：
+
+```bash
+curl -s -X POST http://localhost:8080/v1/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ Trade(order_by: { timestamp: desc }, limit: 5) { id buyer seller price amount timestamp } }"}'
+```
+
+**预期输出**：
+
+```json
+{
+  "data": {
+    "Trade": [
+      {
+        "id": "0x...-3",
+        "buyer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "seller": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "price": "1550000000000000000000",
+        "amount": "30000000000000000",
+        "timestamp": 1234567890
+      }
+    ]
+  }
+}
+```
+
+**查询 Candle（K 线）**：
+
+```bash
+curl -s -X POST http://localhost:8080/v1/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ Candle(where: { resolution: { _eq: \"1m\" } }, order_by: { timestamp: desc }, limit: 5) { id resolution timestamp openPrice highPrice lowPrice closePrice volume } }"}'
+```
+
+**预期输出**（应有多根 K 线，价格分别为 1500、1520、1490、1550）：
+
+```json
+{
+  "data": {
+    "Candle": [
+      {
+        "id": "1m-...",
+        "resolution": "1m",
+        "timestamp": 1234567920,
+        "openPrice": "1490000000000000000000",
+        "highPrice": "1550000000000000000000",
+        "lowPrice": "1490000000000000000000",
+        "closePrice": "1550000000000000000000",
+        "volume": "30000000000000000"
+      }
+    ]
+  }
+}
+```
+
+**查询 LatestCandle（最新价格状态）**：
+
+```bash
+curl -s -X POST http://localhost:8080/v1/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ LatestCandle { id closePrice timestamp } }"}'
+```
+
+**预期输出**：
+
+```json
+{
+  "data": {
+    "LatestCandle": [
+      {
+        "id": "1",
+        "closePrice": "1550000000000000000000",
+        "timestamp": 1234567890
+      }
+    ]
+  }
+}
+```
+
+### 6.4 前端验证
+
+打开 `http://localhost:3000`，验证以下功能：
+
+**Step 1: 检查 Recent Trades 列表**
+- 在页面右侧找到 "Recent Trades" 区域
+- 预期结果：显示多条成交记录，包含价格（如 1500、1520、1490、1550）和数量
+
+**Step 2: 检查浏览器控制台**
+- 打开浏览器开发者工具（F12）→ Console
+- 预期结果：应看到 `[loadTrades]` 和 `[loadCandles]` 的日志，无错误信息
+
+**Step 3: 触发新交易验证实时更新**
+- 在前端下一笔新订单（如 Alice 买入 0.01 @ 1560）
+- 等待 2-3 秒后观察 Recent Trades 列表
+- 预期结果：新成交记录出现在列表顶部
+
+**Step 4: 验证 K 线数据加载（可选）**
+- 如果已集成图表组件，检查 K 线图表是否显示
+- 预期结果：显示多根 K 线，价格范围在 1490-1550 之间
 
 ---
 
@@ -509,7 +584,7 @@ Day 6 会在此基础上实现"资金费率机制"：
 
 ---
 
-## 9) 进阶开发（必须完成）
+## 9) 进阶开发（可选）
 
 1. **多分辨率 K 线**
    - 支持 5m、15m、1h 等多种时间粒度。

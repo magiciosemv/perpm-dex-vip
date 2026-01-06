@@ -201,7 +201,7 @@ class ExchangeStore {
   };
 
   loadTrades = async (viewer?: Address): Promise<Trade[]> => {
-    // Open for implementation in Day 3/5
+    // Open for implementation in Day 5
     return [];
   };
 
@@ -331,7 +331,7 @@ class ExchangeStore {
         this.orderBook = { bids: this.formatOrderBook(bids, true), asks: this.formatOrderBook(asks, false) };
       });
 
-      // Load Trades (Day 3/5)
+      // Load Trades (Day 5)
       // await this.loadTrades(this.account);
 
       // Load Candles (Day 5)

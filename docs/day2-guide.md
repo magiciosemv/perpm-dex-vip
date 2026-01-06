@@ -758,19 +758,19 @@ cancelOrder = async (orderId: bigint) => {
 
 ### Step 4: 从 Indexer 获取订单簿
 
-通过 GraphQL 查询获取订单簿数据，比链上遍历效率高 10-100 倍：
+通过 GraphQL 查询获取订单簿数据，比链上遍历效率高 10-100 倍。
+
+项目中已封装好 `IndexerClient`（见 `frontend/store/IndexerClient.ts`），使用方式：
 
 ```typescript
-const GET_ORDERBOOK = gql`
-  query GetOrderbook {
-    buyOrders: Order(where: { status: "OPEN", isBuy: true }, orderBy: price, orderDirection: desc) {
-      id price amount
-    }
-    sellOrders: Order(where: { status: "OPEN", isBuy: false }, orderBy: price, orderDirection: asc) {
-      id price amount
-    }
-  }
-`;
+import { client, GET_OPEN_ORDERS } from './IndexerClient';
+
+// 查询订单
+const result = await client.query(GET_OPEN_ORDERS, { trader: account }).toPromise();
+if (result.data?.Order) {
+    const orders = result.data.Order;
+    // 处理订单数据...
+}
 ```
 
 > [!NOTE]
