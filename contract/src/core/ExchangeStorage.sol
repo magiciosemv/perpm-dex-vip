@@ -51,7 +51,7 @@ abstract contract ExchangeStorage is AccessControl, ReentrancyGuard {
 
     /// @notice 账户结构体
     struct Account {
-        uint256 freeMargin;   // 可用保证金 (MON)
+        uint256 margin;       // 账户保证金 (MON)
         Position position;    // 用户持仓
     }
 

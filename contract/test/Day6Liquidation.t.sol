@@ -68,15 +68,15 @@ contract Day6LiquidationTest is ExchangeFixture {
         assertEq(exchange.margin(alice), 100 ether - fee, "Alice margin after loss and fee");
         
         // Verify Bob (Liquidator) received the fee
-        // Bob Initial: 2000. 
+        // Bob Initial: 2000.
         // Bob Short 10 @ 100. Price 50. Unrealized PnL: (100 - 50) * 10 = +500.
-        // Bob Free Margin = Initial + Unrealized + Fee?
-        // Wait, exchange.margin(bob) returns freeMargin.
-        // Bob's freeMargin includes realizedPnl (none yet) and unrealized?
-        // No, freeMargin is balance. Unrealized is separate.
-        // Bob received fee into freeMargin.
+        // Bob Margin = Initial + Unrealized + Fee?
+        // Wait, exchange.margin(bob) returns margin.
+        // Bob's margin includes realizedPnl (none yet) and unrealized?
+        // No, margin is balance. Unrealized is separate.
+        // Bob received fee into margin.
         // Bob paid nothing (he just triggered).
-        // So Bob's freeMargin should be Initial + Fee.
+        // So Bob's margin should be Initial + Fee.
         assertEq(exchange.margin(bob), 2000 ether + fee, "Bob received fee");
     }
 
@@ -216,8 +216,8 @@ contract Day6LiquidationTest is ExchangeFixture {
             uint256 expectedMargin = uint256(int256(initialMargin) + pnl) - fee;
             
             // If bad debt (margin < 0), expectedMargin is 0 in exchange.margin() view?
-            // exchange.margin() returns freeMargin.
-            // If bad debt, freeMargin is 0.
+            // exchange.margin() returns account margin.
+            // If bad debt, margin is 0.
             if (int256(initialMargin) + pnl - int256(fee) < 0) {
                  assertEq(exchange.margin(alice), 0, "Alice should be broke");
             } else {

@@ -12,7 +12,7 @@ abstract contract MarginModule is LiquidationModule {
     function deposit() external payable virtual nonReentrant {
         // TODO: 请实现此函数
         // 步骤:
-        // 1. 增加用户的 freeMargin
+        // 1. 增加用户的 margin
         // 2. 触发 MarginDeposited 事件
     }
 
@@ -23,9 +23,9 @@ abstract contract MarginModule is LiquidationModule {
         // 步骤:
         // 1. 检查 amount > 0
         // 2. 应用资金费 _applyFunding
-        // 3. 检查 freeMargin >= amount
+        // 3. 检查 margin >= amount
         // 4. 检查提现后仍满足维持保证金 _ensureWithdrawKeepsMaintenance
-        // 5. 减少 freeMargin
+        // 5. 减少 margin
         // 6. 转账给用户
         // 7. 触发 MarginWithdrawn 事件
     }
@@ -59,7 +59,7 @@ abstract contract MarginModule is LiquidationModule {
         // TODO: 请实现此函数
         // 步骤:
         // 1. 计算 required = _calculateWorstCaseMargin(trader)
-        // 2. 计算 marginBalance = freeMargin + realizedPnl + unrealizedPnl
+        // 2. 计算 marginBalance = margin + unrealizedPnl
         // 3. require(marginBalance >= required, "insufficient margin")
     }
 

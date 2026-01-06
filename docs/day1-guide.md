@@ -8,7 +8,7 @@
 
 完成本节后，你将能够：
 
-- 理解合约里“保证金余额”的最小状态表示（`accounts[trader].freeMargin`）。
+- 理解合约里"保证金余额"的最小状态表示（`accounts[trader].margin`）。
 - 实现 `deposit()` / `withdraw(uint256)` 的基础资金流与安全写法。
 - 学会用 Foundry 测试驱动实现（TDD）：读测试 → 写最小实现 → 跑通测试。
 - 在前端通过真实交易（本地 Anvil）验证余额变化。
@@ -66,7 +66,7 @@
 
 需要实现的函数：
 
-- `margin(address trader)`：返回 `accounts[trader].freeMargin`
+- `margin(address trader)`：返回 `accounts[trader].margin`
 
 > [!NOTE]
 > `getOrder` 和 `getPosition` 会在后续 Day 中实现：
@@ -77,7 +77,7 @@
 
 ```solidity
 function margin(address trader) external view virtual returns (uint256) {
-    return accounts[trader].freeMargin;
+    return accounts[trader].margin;
 }
 ```
 
@@ -87,7 +87,7 @@ function margin(address trader) external view virtual returns (uint256) {
 
 ---
 
-### Step 3: 实现 `deposit()`（增加 freeMargin 并发事件）
+### Step 3: 实现 `deposit()`（增加 margin 并发事件）
 
 修改文件：
 
@@ -95,14 +95,14 @@ function margin(address trader) external view virtual returns (uint256) {
 
 实现要点：
 
-- 充值就是把 `msg.value` 计入 `accounts[msg.sender].freeMargin`
+- 充值就是把 `msg.value` 计入 `accounts[msg.sender].margin`
 - 发出事件：`MarginDeposited(msg.sender, msg.value)`
 
 参考实现：
 
 ```solidity
 function deposit() external payable virtual nonReentrant {
-    accounts[msg.sender].freeMargin += msg.value;
+    accounts[msg.sender].margin += msg.value;
     emit MarginDeposited(msg.sender, msg.value);
 }
 ```
@@ -124,10 +124,10 @@ function deposit() external payable virtual nonReentrant {
 1. `require(amount > 0, "amount=0");`
 2. 先做资金费结算钩子：`_applyFunding(msg.sender);`
    - Day1 不实现资金费公式（Day5 才做），但提前放钩子，保证架构可扩展
-3. 余额检查：`require(freeMargin >= amount, "not enough margin");`
+3. 余额检查：`require(margin >= amount, "not enough margin");`
 4. 维护保证金检查钩子：`_ensureWithdrawKeepsMaintenance(msg.sender, amount);`
    - Day1 不实现完整维持保证金逻辑（Day4/Day6 会补齐）
-5. **先扣账再转账**（防重入）：`freeMargin -= amount;` → `call{value: amount}("")`
+5. **先扣账再转账**（防重入）：`margin -= amount;` → `call{value: amount}("")`
 6. 发出事件 `MarginWithdrawn(msg.sender, amount)`
 
 参考实现：
@@ -136,10 +136,10 @@ function deposit() external payable virtual nonReentrant {
 function withdraw(uint256 amount) external virtual nonReentrant {
     require(amount > 0, "amount=0");
     _applyFunding(msg.sender);
-    require(accounts[msg.sender].freeMargin >= amount, "not enough margin");
+    require(accounts[msg.sender].margin >= amount, "not enough margin");
     _ensureWithdrawKeepsMaintenance(msg.sender, amount);
 
-    accounts[msg.sender].freeMargin -= amount;
+    accounts[msg.sender].margin -= amount;
     (bool ok, ) = msg.sender.call{value: amount}("");
     require(ok, "withdraw failed");
 
@@ -253,14 +253,14 @@ withdraw = async (amount: string) => {
 
 ## 5) 解析：为什么这样写
 
-### 5.1 freeMargin 是什么？
+### 5.1 margin 是什么？
 
 `ExchangeStorage` 里有：
 
 - `mapping(address => Account) internal accounts;`
-- `Account.freeMargin`：代表用户当前“可用保证金”（以 wei 计）
+- `Account.margin`：代表用户当前"账户保证金"（以 wei 计）
 
-Day1 先不引入“锁定保证金/挂单占用/维持保证金”等概念，保持最小状态闭环。
+Day1 先不引入保证金检查逻辑，保持最小状态闭环。后续 Day 会通过即时计算 `_calculateWorstCaseMargin` 来验证保证金是否充足（系统不使用独立的 `lockedMargin` 字段）。
 
 ### 5.2 为什么用 `nonReentrant` + “先扣账再转账”？
 
@@ -519,7 +519,7 @@ pnpm dev
 
 今天我们完成了“资金进出 + 余额读取”这一最小闭环：
 
-- `deposit`：增加 `freeMargin`
+- `deposit`：增加 `margin`
 - `withdraw`：做最小校验并安全转账
 - `margin()`：让测试与前端能读取链上余额
 

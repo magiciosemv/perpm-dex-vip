@@ -46,7 +46,7 @@ abstract contract FundingModule is ExchangeStorage {
         // 3. 调用 settleFunding() 确保全局费率最新
         // 4. 计算 diff = cumulativeFundingRate - lastFundingIndex[trader]
         // 5. 计算 payment = size * markPrice * diff / 1e36
-        // 6. 更新用户 freeMargin
+        // 6. 更新用户 margin
         // 7. 更新 lastFundingIndex[trader]
         // 8. 触发 FundingPaid 事件
     }

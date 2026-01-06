@@ -134,20 +134,20 @@ function _applyFunding(address trader) internal virtual {
     int256 payment = (int256(p.size) * int256(markPrice) * diff) / 1e36;
     
     // Step 5: 更新用户保证金
-    uint256 free = a.freeMargin;
+    uint256 free = a.margin;
     if (payment > 0) {
         // 需要支付
         uint256 pay = uint256(payment);
         if (pay > free) {
-            // debt 情况：freeMargin 不足，全部扣除
-            a.freeMargin = 0;
+            // debt 情况：margin 不足，全部扣除
+            a.margin = 0;
         } else {
-            a.freeMargin = free - pay;
+            a.margin = free - pay;
         }
     } else if (payment < 0) {
         // 获得收入
         uint256 credit = uint256(-payment);
-        a.freeMargin = free + credit;
+        a.margin = free + credit;
     }
     
     // Step 6: 更新用户费率 index

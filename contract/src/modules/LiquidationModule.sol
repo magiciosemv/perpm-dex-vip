@@ -16,7 +16,7 @@ abstract contract LiquidationModule is PricingModule {
         // 步骤:
         // 1. 获取用户持仓，如果为 0 返回 false
         // 2. 计算当前标记价下的未实现盈亏
-        // 3. 计算 marginBalance = freeMargin + realizedPnl + unrealizedPnl
+        // 3. 计算 marginBalance = margin + unrealizedPnl
         // 4. 计算 maintenance = positionValue * (maintenanceMarginBps + liquidationFeeBps) / 10000
         // 5. 返回 marginBalance < maintenance
         return false;
@@ -77,7 +77,7 @@ abstract contract LiquidationModule is PricingModule {
         // 1. 获取用户当前持仓
         // 2. 判断是加仓还是减仓/平仓
         // 3. 加仓: 计算加权平均入场价，增加持仓
-        // 4. 减仓: 计算已实现盈亏，更新 realizedPnl 和 freeMargin
+        // 4. 减仓: 计算已实现盈亏，更新 margin
         // 5. 更新持仓 size 和 entryPrice
     }
 }

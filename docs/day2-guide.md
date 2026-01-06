@@ -373,7 +373,7 @@ Day2 的要求不是做完整风控，但为了后续 Day3+ 不返工，建议�
 
 - `_calculatePositionMargin`：`abs(size) * markPrice / 1e18 * initialMarginBps / 10000`
 - `_calculateWorstCaseMargin`：遍历买/卖链表，累加该用户挂单量，算“全买成交/全卖成交”两种持仓，取更大保证金
-- `_checkWorstCaseMargin`：`freeMargin + unrealizedPnl >= required`（注意：`realizedPnl` 已在 `_updatePosition` 结算到 `freeMargin`，无需重复加）
+- `_checkWorstCaseMargin`：`margin + unrealizedPnl >= required`（注意：`realizedPnl` 已在 `_updatePosition` 结算到 `margin`，无需重复加）
 
 参考实现（可直接照写；注意这里不强制要求 `markPrice > 0`，Day4 再收紧）：
 
@@ -422,7 +422,7 @@ function _calculatePositionMargin(int256 size) internal view returns (uint256) {
         Position memory p = accounts[trader].position;
 
         int256 marginBalance =
-            int256(accounts[trader].freeMargin) + _unrealizedPnl(p);
+            int256(accounts[trader].margin) + _unrealizedPnl(p);
 
         require(marginBalance >= int256(required), "insufficient margin");
     }

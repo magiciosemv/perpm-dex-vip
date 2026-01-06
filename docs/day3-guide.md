@@ -1,6 +1,6 @@
 # Day 3 - 撮合与持仓更新（Matching & Positions）
 
-本节目标：在 Day 2 的订单簿基础上，完成成交后的核心状态更新：撮合触发 `_executeTrade`，并正确维护 `Position.size` / `entryPrice`，将已实现盈亏直接计入 `freeMargin`。
+本节目标：在 Day 2 的订单簿基础上，完成成交后的核心状态更新：撮合触发 `_executeTrade`，并正确维护 `Position.size` / `entryPrice`，将已实现盈亏直接计入 `margin`。
 
 ---
 
@@ -35,7 +35,7 @@ forge test --match-contract Day2OrderbookTest -vvv
 - `forge test --match-contract Day3MatchingTest -vvv` 全部通过
 - 部分成交后订单 `amount` 正确减少
 - 双方持仓 `size` 更新正确（多头为正、空头为负）
-- 反向平仓后盈亏正确结算到 `freeMargin`
+- 反向平仓后盈亏正确结算到 `margin`
 
 ---
 
@@ -51,7 +51,7 @@ forge test --match-contract Day2OrderbookTest -vvv
 
 1. **部分成交更新持仓**：成交后订单剩余数量正确
 2. **价格不交叉不成交**：买价 < 最优卖价时不成交
-3. **反向平仓结算 PnL**：盈亏直接更新到 `freeMargin`
+3. **反向平仓结算 PnL**：盈亏直接更新到 `margin`
 4. **taker 跨多档吃单**：多档成交后订单簿清空
 
 ---
@@ -151,7 +151,7 @@ function _executeTrade(
 核心规则：
 
 - **同方向加仓**：按加权平均价更新 `entryPrice`
-- **反方向减仓/平仓**：计算已实现盈亏并更新 `freeMargin`
+- **反方向减仓/平仓**：计算已实现盈亏并更新 `margin`
 - **反向开仓**：完全对冲后还有剩余，则按成交价开新仓
 
 关键公式：
@@ -192,10 +192,10 @@ function _updatePosition(
         : int256(p.entryPrice) - int256(tradePrice);
     int256 pnl = (pnlPerUnit * int256(closing)) / int256(SCALE);
 
-    // 盈亏直接结算到 freeMargin（无需单独记录 realizedPnl）
-    int256 newMargin = int256(accounts[trader].freeMargin) + pnl;
-    if (newMargin < 0) accounts[trader].freeMargin = 0;
-    else accounts[trader].freeMargin = uint256(newMargin);
+    // 盈亏直接结算到 margin（无需单独记录 realizedPnl）
+    int256 newMargin = int256(accounts[trader].margin) + pnl;
+    if (newMargin < 0) accounts[trader].margin = 0;
+    else accounts[trader].margin = uint256(newMargin);
 
     // 3) 是否反向开仓
     uint256 remaining = amount - closing;
@@ -431,9 +431,9 @@ cd frontend && pnpm dev
    - 检查 `closing` 与 `remaining` 的分支逻辑
    - 确认 `remaining = amount - closing` 计算正确
 
-4. **freeMargin 没变化**
-   - 确认 `pnl` 结果已写入 `freeMargin`
-   - 检查 `int256 newMargin = int256(accounts[trader].freeMargin) + pnl;` 这行
+4. **margin 没变化**
+   - 确认 `pnl` 结果已写入 `margin`
+   - 检查 `int256 newMargin = int256(accounts[trader].margin) + pnl;` 这行
 
 5. **前端成交列表不更新**
    - 确认 Indexer 正在运行且监听 `TradeExecuted` 事件
@@ -671,7 +671,7 @@ const pos = await publicClient.readContract({
 
 - `_executeTrade`：撮合后的统一入口，触发事件、更新双方持仓
 - `_updatePosition`：处理加仓、减仓、反向开仓三种场景
-- 平仓盈亏：平仓时结算已实现盈亏，直接更新到 `freeMargin`
+- 平仓盈亏：平仓时结算已实现盈亏，直接更新到 `margin`
 - Indexer：索引成交记录和持仓变化
 
 Day 4 会在此基础上引入"价格服务"：

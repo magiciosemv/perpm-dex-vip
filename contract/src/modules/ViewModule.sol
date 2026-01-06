@@ -16,12 +16,12 @@ abstract contract ViewModule is ExchangeStorage {
         revert("Not implemented");
     }
 
-    /// @notice 获取用户可用保证金
+    /// @notice 获取用户账户保证金
     /// @param trader 用户地址
-    /// @return 可用保证金数量
+    /// @return 账户保证金数量
     function margin(address trader) external view virtual returns (uint256) {
         // TODO: 请实现此函数
-        // 提示: 从 accounts[trader].freeMargin 读取
+        // 提示: 从 accounts[trader].margin 读取
         revert("Not implemented");
     }
 

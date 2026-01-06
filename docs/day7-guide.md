@@ -72,7 +72,7 @@ function canLiquidate(address trader) public view virtual returns (bool) {
     
     int256 unrealized = _unrealizedPnl(p);
     
-    int256 marginBalance = int256(accounts[trader].freeMargin) + p.realizedPnl + unrealized;
+    int256 marginBalance = int256(accounts[trader].margin) + p.realizedPnl + unrealized;
     
     uint256 priceBase = markPrice == 0 ? p.entryPrice : markPrice;
     uint256 positionValue = SignedMath.abs(int256(priceBase) * p.size) / 1e18;
@@ -159,13 +159,13 @@ function liquidate(address trader, uint256 amount) external virtual nonReentrant
     if (fee < minLiquidationFee) fee = minLiquidationFee;
     
     // 从被清算者扣除，给清算者
-    if (accounts[trader].freeMargin >= fee) {
-        accounts[trader].freeMargin -= fee;
-        accounts[msg.sender].freeMargin += fee;
+    if (accounts[trader].margin >= fee) {
+        accounts[trader].margin -= fee;
+        accounts[msg.sender].margin += fee;
     } else {
-        uint256 available = accounts[trader].freeMargin;
-        accounts[trader].freeMargin = 0;
-        accounts[msg.sender].freeMargin += available;
+        uint256 available = accounts[trader].margin;
+        accounts[trader].margin = 0;
+        accounts[msg.sender].margin += available;
         
         uint256 debt = fee - available;
         p.realizedPnl -= int256(debt);
@@ -388,11 +388,11 @@ Exchange.Liquidated.handler(async ({ event, context }) => {
 const marginRatio = useMemo(() => {
     if (!position || position.size === 0n) return null;
     
-    const marginBalance = freeMargin + unrealizedPnl;
+    const marginBalance = margin + unrealizedPnl;
     const positionValue = Math.abs(Number(formatEther(position.size))) * markPrice;
     
     return (marginBalance / positionValue) * 100;  // 百分比
-}, [position, freeMargin, unrealizedPnl, markPrice]);
+}, [position, margin, unrealizedPnl, markPrice]);
 ```
 
 ### 9.2 危险预警 Toast
